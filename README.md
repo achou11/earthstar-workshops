@@ -1,5 +1,7 @@
 # Earthstar Workshops
 
-Apps and examples derived from earthstar workshops
+Apps and examples derived from Earthstar workshops
 
-- 2022-09-30: [Vanilla Chat](./01-vanilla-chat/) - _a basic chat application with ephemerality_
+- 2022-09-30: [Vanilla Chat](./01-vanilla-chat/) - _a basic chat application that doesn't do much_
+
+- 2022-10-21: [Vanilla Chat (continued)](./02-vanilla-chat-continued/) - _continuation of workshop 1 where we added actual chat features_
