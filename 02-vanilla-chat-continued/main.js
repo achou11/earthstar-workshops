@@ -185,17 +185,11 @@ function setupOnlinePresence() {
   function updateDoc() {
     if (!author) return;
 
-    console.log("HELLO");
-
-    replica
-      .set(author, {
-        path: `/about/~${authorAddress}/!lastOnline`,
-        text: JSON.stringify(true),
-        deleteAfter: Date.now() * 1000 + 120_000_000,
-      })
-      .then((result) => {
-        console.log(result);
-      });
+    replica.set(author, {
+      path: `/about/~${authorAddress}/!lastOnline`,
+      text: JSON.stringify(true),
+      deleteAfter: Date.now() * 1000 + 120_000_000,
+    });
   }
 
   updateDoc();
