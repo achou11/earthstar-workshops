@@ -24,9 +24,12 @@ const displayNameInput = displayNameForm.querySelector(
   "[name=display-name-input]"
 );
 
+const participantsList = document.getElementById("participants");
+
 const messageForm = document.getElementById("message-form");
 const messageInput = messageForm.querySelector("[name=message-input]");
 
+const chatContainer = document.getElementById("chat-container");
 const log = document.getElementById("log");
 
 // Write messages to the replica on form submit
@@ -72,8 +75,12 @@ const cacheDocs = cache.queryDocs({
   },
 });
 
+const participants = getParticipants();
+
 // Update the log initially
 updateLog(cacheDocs);
+
+updateParticipants(participants);
 
 // Whenever the replica is updated, this gets called and we update the log
 cache.onCacheUpdated(() => {
@@ -84,6 +91,7 @@ cache.onCacheUpdated(() => {
   });
 
   updateLog(updatedDocs);
+  updateParticipants(getParticipants());
 });
 
 // Update the displayed messages in the log
@@ -103,6 +111,22 @@ function updateLog(docs) {
     message.textContent = `${displayedName}: ${doc.text}`;
 
     log.appendChild(message);
+  });
+
+  // Scroll to bottom!
+  chatContainer.scrollTop = chatContainer.scrollHeight;
+}
+
+function updateParticipants(participants) {
+  console.log(participants);
+
+  participantsList.innerHTML = "";
+
+  participants.forEach((p) => {
+    const listItem = document.createElement("li");
+    listItem.textContent = p;
+
+    participantsList.appendChild(listItem);
   });
 }
 
@@ -135,4 +159,13 @@ function getEarthstarConfig() {
     author,
     replicaServerUrls,
   };
+}
+
+function getParticipants() {
+  const authors = cache.queryAuthors({
+    filter: {
+      pathStartsWith: "/chat",
+    },
+  });
+  return authors;
 }
