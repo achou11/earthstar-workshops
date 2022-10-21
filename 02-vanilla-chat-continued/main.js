@@ -118,13 +118,20 @@ function updateLog(docs) {
 }
 
 function updateParticipants(participants) {
-  console.log(participants);
-
   participantsList.innerHTML = "";
 
-  participants.forEach((p) => {
+  participants.forEach((participant) => {
+    const online = !!cache.getLatestDocAtPath(
+      `/about/~${participant}/!lastOnline`
+    );
+
+    const parsedAuthorAddress = Earthstar.parseAuthorAddress(participant);
+
+    const displayedName = `@${parsedAuthorAddress.name}`;
+
     const listItem = document.createElement("li");
-    listItem.textContent = p;
+
+    listItem.textContent = displayedName + (online ? " 🟢" : "");
 
     participantsList.appendChild(listItem);
   });
@@ -169,3 +176,31 @@ function getParticipants() {
   });
   return authors;
 }
+
+function setupOnlinePresence() {
+  const interval = setInterval(() => {
+    updateDoc();
+  }, 80_000);
+
+  function updateDoc() {
+    if (!author) return;
+
+    console.log("HELLO");
+
+    replica
+      .set(author, {
+        path: `/about/~${authorAddress}/!lastOnline`,
+        text: JSON.stringify(true),
+        deleteAfter: Date.now() * 1000 + 120_000_000,
+      })
+      .then((result) => {
+        console.log(result);
+      });
+  }
+
+  updateDoc();
+
+  return () => clearInterval(interval);
+}
+
+setupOnlinePresence();
