@@ -1,0 +1,10 @@
+#chat-container {
+    max-height: 200px;
+    overflow-y: auto;
+    border: 1px solid black;
+}
+
+#input-form {
+    position: absolute;
+    bottom: 100px;
+}
