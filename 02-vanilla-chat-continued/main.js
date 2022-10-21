@@ -1,149 +1,35 @@
 import * as Earthstar from "./earthstar.bundle.js";
 
-const config = getEarthstarConfig();
-
-// Generated using Earthstar.Crypto.generateShareKeypair()
-const shareAddress = config.shareAddresses[0];
-
-const shareSecret = config.shareSecrets[shareAddress];
-
-// Generated using Earthstar.Crypto.generateAuthorKeypair()
-const author = config.author;
-const authorAddress = author.address;
-const authorSecret = author.secret;
-
-// Create the replica, which stores the documents and allows us to query them
-const replica = new Earthstar.Replica({
-  driver: new Earthstar.ReplicaDriverWeb(shareAddress),
-  shareSecret,
-});
-
 // Set up references to different UI for interactive parts
 const displayNameForm = document.getElementById("display-name-form");
 const displayNameInput = displayNameForm.querySelector(
   "[name=display-name-input]"
 );
-
 const participantsList = document.getElementById("participants");
-
 const messageForm = document.getElementById("message-form");
 const messageInput = messageForm.querySelector("[name=message-input]");
-
 const chatContainer = document.getElementById("chat-container");
 const log = document.getElementById("log");
 
-// Write messages to the replica on form submit
-messageForm.addEventListener("submit", async (event) => {
-  event.preventDefault();
+// Start the app!
+main();
 
-  const result = await replica.set(
-    {
-      address: authorAddress,
-      secret: authorSecret,
-    },
-    {
-      path: `/chat/~${authorAddress}/${Date.now()}`,
-      text: messageInput.value,
-    }
-  );
+// We set things up here!
+function main() {
+  const { author, cache, replica } = initEarthstar();
 
-  messageInput.value = "";
-});
-
-displayNameForm.addEventListener("submit", async (event) => {
-  event.preventDefault();
-
-  const result = await replica.set(
-    { address: authorAddress, secret: authorSecret },
-    {
-      path: `/about/~${authorAddress}/displayName`,
-      text: displayNameInput.value,
-    }
-  );
-
-  displayNameInput.value = "";
-});
-
-// Load the data from the replica and write to the doc
-// The cache allows us to listen to updates to the replica, adding the reactivity aspects we need
-const cache = new Earthstar.ReplicaCache(replica);
-
-// On initial page load, query the previously existing docs and update the log
-const cacheDocs = cache.queryDocs({
-  filter: {
-    pathStartsWith: "/chat",
-  },
-});
-
-const participants = getParticipants();
-
-// Update the log initially
-updateLog(cacheDocs);
-
-updateParticipants(participants);
-
-// Whenever the replica is updated, this gets called and we update the log
-cache.onCacheUpdated(() => {
-  const updatedDocs = cache.queryDocs({
-    filter: {
-      pathStartsWith: "/chat",
-    },
+  // React to updates to the replica cache, which we'll use to update the UI
+  cache.instance.onCacheUpdated(() => {
+    updateUi(cache);
   });
 
-  updateLog(updatedDocs);
-  updateParticipants(getParticipants());
-});
+  initDomListeners({ author, replica });
 
-// Update the displayed messages in the log
-function updateLog(docs) {
-  log.innerHTML = "";
-
-  docs.forEach((doc) => {
-    const displayName = cache.getLatestDocAtPath(
-      `/about/~${doc.author}/displayName`
-    );
-
-    const parsed = Earthstar.parseAuthorAddress(doc.author);
-
-    const displayedName = displayName?.text || `@${parsed.name}`;
-
-    const message = document.createElement("li");
-    message.textContent = `${displayedName}: ${doc.text}`;
-
-    log.appendChild(message);
-  });
-
-  // Scroll to bottom!
-  chatContainer.scrollTop = chatContainer.scrollHeight;
+  initOnlinePresence({ author, replica });
 }
 
-function updateParticipants(participants) {
-  participantsList.innerHTML = "";
-
-  participants.forEach((participant) => {
-    const online = !!cache.getLatestDocAtPath(
-      `/about/~${participant}/!lastOnline`
-    );
-
-    const parsedAuthorAddress = Earthstar.parseAuthorAddress(participant);
-
-    const displayedName = `@${parsedAuthorAddress.name}`;
-
-    const listItem = document.createElement("li");
-
-    listItem.textContent = displayedName + (online ? " 🟢" : "");
-
-    participantsList.appendChild(listItem);
-  });
-}
-
-// Sync with a remote replica so that we can get updates from other internet-enabled
-const peer = new Earthstar.Peer();
-peer.addReplica(replica);
-
-// The 'live' argument keeps a persistent connection that will update the replica whenever changes are detected from the remote replica
-const syncer = peer.sync(config.replicaServerUrls[0], "live");
-
+// Get config information used for Earthstar
+// Generated using https://github.com/earthstar-project/applet-control-panel
 function getEarthstarConfig() {
   const shareAddresses = JSON.parse(
     localStorage.getItem("earthstar:peer:shares")
@@ -153,7 +39,6 @@ function getEarthstarConfig() {
     localStorage.getItem("earthstar:peer:share-secrets")
   );
 
-  // Generated using Earthstar.Crypto.generateAuthorKeypair()
   const author = JSON.parse(localStorage.getItem("earthstar:peer:author"));
 
   const replicaServerUrls = JSON.parse(
@@ -168,33 +53,176 @@ function getEarthstarConfig() {
   };
 }
 
-function getParticipants() {
-  const authors = cache.queryAuthors({
-    filter: {
-      pathStartsWith: "/chat",
-    },
+function initEarthstar() {
+  const config = getEarthstarConfig();
+
+  const shareAddress = config.shareAddresses[0];
+  const shareSecret = config.shareSecrets[shareAddress];
+
+  // Create the replica, which stores the documents and allows us to query them
+  const replica = new Earthstar.Replica({
+    driver: new Earthstar.ReplicaDriverWeb(shareAddress),
+    shareSecret,
   });
-  return authors;
+
+  const cache = initReplicaCache(replica);
+
+  const sync = initSync(config.replicaServerUrls[0], replica);
+
+  return {
+    ...sync,
+    author: config.author,
+    cache,
+    replica,
+  };
 }
 
-function setupOnlinePresence() {
-  const interval = setInterval(() => {
-    updateDoc();
-  }, 80_000);
+function initReplicaCache(replica) {
+  // Load the data from the replica and write to the doc
+  // The cache allows us to listen to updates to the replica, adding the reactivity aspects we need
+  const replicaCache = new Earthstar.ReplicaCache(replica);
 
+  // Initialize the cache queries
+  getLogDocuments();
+  getParticipants();
+
+  return { instance: replicaCache, getLogDocuments, getParticipants };
+
+  function getLogDocuments() {
+    return replicaCache.queryDocs({
+      filter: { pathStartsWith: "/chat" },
+    });
+  }
+
+  function getParticipants() {
+    return replicaCache.queryAuthors({
+      filter: { pathStartsWith: "/chat" },
+    });
+  }
+}
+
+function initSync(remoteUrl, replica) {
+  // Sync with a remote replica so that we can get updates from other internet-enabled
+  const peer = new Earthstar.Peer();
+
+  peer.addReplica(replica);
+
+  // The 'live' argument keeps a persistent connection that will update the replica whenever changes are detected from the remote replica
+  const syncer = peer.sync(remoteUrl, "live");
+
+  return { peer, syncer };
+}
+
+function initDomListeners({ author, replica }) {
+  // Add submit handler for the message input
+  messageForm.addEventListener("submit", async (event) => {
+    event.preventDefault();
+
+    const result = await replica.set(
+      {
+        address: author.address,
+        secret: author.secret,
+      },
+      {
+        path: `/chat/~${author.address}/${Date.now()}`,
+        text: messageInput.value,
+      }
+    );
+
+    messageInput.value = "";
+  });
+
+  // Add submit handler for the display name input
+  displayNameForm.addEventListener("submit", async (event) => {
+    event.preventDefault();
+
+    const result = await replica.set(
+      { address: author.address, secret: author.secret },
+      {
+        path: `/about/~${author.address}/displayName`,
+        text: displayNameInput.value,
+      }
+    );
+
+    displayNameInput.value = "";
+  });
+}
+
+// Query updated data and update UI
+function updateUi(cache) {
+  const logDocs = cache.getLogDocuments({
+    filter: { pathStartsWith: "/chat" },
+  });
+
+  const participants = cache.getParticipants({
+    filter: { pathStartsWith: "/chat" },
+  });
+
+  updateLogUi(logDocs, {
+    getDisplayName: (authorAddress) =>
+      cache.instance.getLatestDocAtPath(`/about/~${authorAddress}/displayName`),
+  });
+
+  updateParticipantsUi(participants, {
+    getIsOnline: (participant) =>
+      !!cache.instance.getLatestDocAtPath(`/about/~${participant}/!lastOnline`),
+  });
+}
+
+// Update the displayed messages in the log
+function updateLogUi(docs, { getDisplayName }) {
+  log.innerHTML = "";
+
+  docs.forEach(({ author, text }) => {
+    const displayName = getDisplayName(author);
+    const parsedAuthorAddress = Earthstar.parseAuthorAddress(author);
+    const nameToDisplay = displayName?.text || `@${parsedAuthorAddress.name}`;
+
+    const message = document.createElement("li");
+    message.textContent = `${nameToDisplay}: ${text}`;
+
+    log.appendChild(message);
+  });
+
+  // Scroll to bottom!
+  chatContainer.scrollTop = chatContainer.scrollHeight;
+}
+
+function updateParticipantsUi(participants, { getIsOnline }) {
+  participantsList.innerHTML = "";
+
+  participants.forEach((participant) => {
+    const parsedAuthorAddress = Earthstar.parseAuthorAddress(participant);
+
+    const displayedName = `@${parsedAuthorAddress.name}`;
+
+    const listItem = document.createElement("li");
+
+    listItem.textContent =
+      displayedName + (getIsOnline(participant) ? " 🟢" : "");
+
+    participantsList.appendChild(listItem);
+  });
+}
+
+// Set up an interval that writes to a document used for determining if an author is currently online
+function initOnlinePresence({ author, replica }) {
   function updateDoc() {
     if (!author) return;
 
     replica.set(author, {
-      path: `/about/~${authorAddress}/!lastOnline`,
+      path: `/about/~${author.address}/!lastOnline`,
       text: JSON.stringify(true),
       deleteAfter: Date.now() * 1000 + 120_000_000,
     });
   }
 
+  const interval = setInterval(() => {
+    updateDoc();
+  }, 80_000);
+
+  // Do an initial call to have something written immediately
   updateDoc();
 
   return () => clearInterval(interval);
 }
-
-setupOnlinePresence();
