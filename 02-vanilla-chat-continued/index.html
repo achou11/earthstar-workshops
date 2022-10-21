@@ -7,23 +7,33 @@
     <title>Earthstar Vanilla Chat</title>
     <meta name="description" content="Simple chat application to showcase Earthstar">
     <meta name="viewport" content="width=device-width, initial-scale=1">
-    <!-- <link rel="stylesheet" href=""> -->
+    <link rel="stylesheet" href="./styles.css">
     <style></style>
     <script src="./earthstar.bundle.js" type="module">
     </script>
 </head>
 
 <body>
-    Earthstar!
+    <h1>Vanilla Chat</h1>
 
-    <form id="input-form">
+    <div id="chat-container">
+        <ul id="log"></ul>
+    </div>
+
+
+    <form id="display-name-form">
+        <label for="display-name-input">Display Name</label>
+        <input type="text" name="display-name-input" />
+        <button>Submit</button>
+    </form>
+
+
+    <form id="message-form">
+        <label for="message-input">Message</label>
         <input type="text" name="message-input" />
         <button>Submit</button>
     </form>
 
-    <ul id="log">
-
-    </ul>
     <script src="./main.js" type="module" async defer></script>
 </body>
 

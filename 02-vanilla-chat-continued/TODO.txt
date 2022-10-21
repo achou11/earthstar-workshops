@@ -1,0 +1,1 @@
+- add helpers for retrieving earthstar info from local storage. use storage window event to listen to relevant changes
