@@ -102,3 +102,6 @@ dist
 
 # TernJS port file
 .tern-port
+
+# Ignore share data directory from attachments workshop
+03-attachments/share-data
